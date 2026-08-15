@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.woogy7.tides",
+  "name": "Tides",
+  "version": "1.0.0",
+  "author": "Woogy7",
+  "description": "Tide times, heights and a scrubbable 24-hour tide curve for your beach",
+  "homepage": "https://github.com/Woogy7/omarchy-tides",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Tides",
+    "description": "Wave icon in the bar; click for tide times, heights and a scrubbable tide curve",
+    "category": "Info",
+    "allowMultiple": false,
+    "defaultSection": "center"
+  }
+}
