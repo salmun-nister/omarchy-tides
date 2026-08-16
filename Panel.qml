@@ -87,6 +87,19 @@ Panel {
   readonly property bool hasCoordinates: configuredLocationState.latitude !== null && configuredLocationState.longitude !== null
   readonly property string locationKey: hasCoordinates ? configuredLocationState.latitude + "," + configuredLocationState.longitude : ""
 
+  // ---- Units. Persisted in tides-units.json; until one is chosen the
+  //      default follows the system locale (feet on en_US, metres elsewhere).
+  property string units: ""
+  readonly property string defaultUnits:
+    (Qt.locale().name || "").toLowerCase().indexOf("en_us") === 0 ? "imperial" : "metric"
+  readonly property string effectiveUnits: root.units !== "" ? root.units : root.defaultUnits
+
+  function toggleUnits() {
+    var next = root.effectiveUnits === "imperial" ? "metric" : "imperial"
+    root.units = next
+    unitsFile.setText(JSON.stringify({ units: next }, null, 2) + "\n")
+  }
+
   onLocationKeyChanged: {
     marineRetries = 0
     marineProc.running = false
@@ -111,10 +124,21 @@ Panel {
     onLoadFailed: root.tidesLocationState = Model.parseLocationFile("")
   }
 
+  readonly property string unitsPath: Quickshell.env("HOME") + "/.local/state/omarchy/settings/tides-units.json"
+  property FileView unitsFile: FileView {
+    path: root.unitsPath
+    watchChanges: true
+    atomicWrites: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: root.units = Model.parseUnits(text())
+    onLoadFailed: root.units = ""
+  }
+
   Timer {
     interval: 1500
     running: true
-    onTriggered: { weatherLocationFile.reload(); tidesLocationFile.reload() }
+    onTriggered: { weatherLocationFile.reload(); tidesLocationFile.reload(); unitsFile.reload() }
   }
 
   // ---- Click-to-edit location (mirrors the weather panel's editor).
@@ -332,10 +356,14 @@ Panel {
             id: heroLeft
             anchors.left: parent.left
             anchors.leftMargin: Style.space(16)
+            anchors.right: heroRight.left
+            anchors.rightMargin: Style.space(8)
             anchors.verticalCenter: parent.verticalCenter
             spacing: Style.space(10)
+            clip: true
 
             Text {
+              id: waveMark
               anchors.verticalCenter: parent.verticalCenter
               text: root.waveIcon
               color: root.bar.foreground
@@ -346,11 +374,13 @@ Panel {
             Item {
               anchors.verticalCenter: parent.verticalCenter
               visible: !root.editingLocation
-              width: locationLabel.implicitWidth
+              width: Math.max(0, parent.width - waveMark.implicitWidth - parent.spacing)
               height: locationLabel.implicitHeight
 
               Text {
                 id: locationLabel
+                width: parent.width
+                elide: Text.ElideRight
                 text: root.configuredLocationState.name !== ""
                   ? root.configuredLocationState.name.toUpperCase()
                   : (root.hasCoordinates ? "" : "SET LOCATION")
@@ -460,7 +490,7 @@ Panel {
                   font.letterSpacing: 1
                 }
                 Text {
-                  text: Model.formatHeight(root.currentHeight)
+                  text: Model.formatHeight(root.currentHeight, root.effectiveUnits)
                   color: root.bar.foreground
                   font.family: root.bar.fontFamily
                   font.pixelSize: Style.font.title
@@ -494,7 +524,7 @@ Panel {
                   font.letterSpacing: 1
                 }
                 Text {
-                  text: Model.todayRange(root.events, root.now)
+                  text: Model.todayRange(root.events, root.now, root.effectiveUnits)
                   color: root.bar.foreground
                   font.family: root.bar.fontFamily
                   font.pixelSize: Style.font.title
@@ -581,6 +611,10 @@ Panel {
             readonly property color fg: root.bar.foreground
             onFgChanged: requestPaint()
 
+            // Left edge (canvas coords) of the zone reserved for the units
+            // button in the bottom-right corner, so labels never paint under it.
+            readonly property real unitsReservedLeft: width - unitsButton.width - Style.space(8)
+
             // Window geometry shared with the scrub handler.
             readonly property real windowStartMs: root.now.getTime() - 6 * 3600 * 1000
             readonly property real windowMs: 24 * 3600 * 1000
@@ -608,6 +642,7 @@ Panel {
               function onMarineReportChanged() { tideCurve.requestPaint() }
               function onNowChanged() { tideCurve.requestPaint() }
               function onScrubTimeChanged() { tideCurve.requestPaint() }
+              function onEffectiveUnitsChanged() { tideCurve.requestPaint() }
             }
 
             MouseArea {
@@ -664,7 +699,8 @@ Panel {
               ctx.globalAlpha = 0.45
               ctx.fillStyle = fgc
               for (var tm = tick.getTime(); tm < endMs; tm += 6 * 3600 * 1000) {
-                ctx.fillText(Model.pad2(new Date(tm).getHours()), x(tm), h - 2)
+                var tickX = x(tm)
+                if (tickX < unitsReservedLeft) ctx.fillText(Model.pad2(new Date(tm).getHours()), tickX, h - 2)
               }
 
               // The curve itself.
@@ -744,11 +780,31 @@ Panel {
 
                 ctx.globalAlpha = 1
                 ctx.fillStyle = fgc
-                var labelText = Model.formatTime(root.cursorTime) + " · " + Model.formatHeight(cv)
+                var labelText = Model.formatTime(root.cursorTime) + " · " + Model.formatHeight(cv, root.effectiveUnits)
                 var labelX = Math.min(Math.max(cx, 40), w - 40)
+                // Keep the label out from under the units button.
+                var labelW = ctx.measureText(labelText).width
+                if (labelX + labelW / 2 > unitsReservedLeft) labelX = Math.max(40, unitsReservedLeft - labelW / 2)
                 ctx.fillText(labelText, labelX, h - padBottom + captionPx + 10)
               }
             }
+          }
+
+          Button {
+            id: unitsButton
+            anchors.right: parent.right
+            anchors.rightMargin: Style.space(20)
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: Style.space(6)
+            text: "m/ft"
+            tooltipText: root.effectiveUnits === "imperial" ? "Switch to metres" : "Switch to feet"
+            bordered: true
+            foreground: root.bar.foreground
+            fontFamily: root.bar.fontFamily
+            fontSize: Style.font.bodySmall
+            horizontalPadding: Style.space(5)
+            verticalPadding: Style.space(2)
+            onClicked: root.toggleUnits()
           }
         }
 
@@ -826,7 +882,7 @@ Panel {
                         font.pixelSize: Style.font.body
                       }
                       Text {
-                        text: Model.formatHeight(modelData.height)
+                        text: Model.formatHeight(modelData.height, root.effectiveUnits)
                         color: Qt.darker(root.bar.foreground, 1.5)
                         font.family: root.bar.fontFamily
                         font.pixelSize: Style.font.body

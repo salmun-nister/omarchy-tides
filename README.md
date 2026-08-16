@@ -19,6 +19,16 @@ A wave icon lives in the bar. Click it for a panel showing:
 Everything is drawn with the shell's own theme colours and fonts, so it follows
 your Omarchy theme.
 
+## Units
+
+Heights can be shown in metres or feet. Use the small `m`/`ft` button in the
+bottom-right corner of the tide chart to switch — the choice is stored in
+`~/.local/state/omarchy/settings/tides-units.json` and applies to every height
+(Now, Range, the curve cursor, and the day's tide rows).
+
+Until you pick a unit, the default follows your system locale: feet on an
+`en_US` system, metres everywhere else.
+
 ## Install
 
 ```bash
@@ -52,6 +62,12 @@ To also forget a saved tides location:
 
 ```bash
 rm -f ~/.local/state/omarchy/settings/tides.json
+```
+
+To also reset the units preference:
+
+```bash
+rm -f ~/.local/state/omarchy/settings/tides-units.json
 ```
 
 ## Data and dependencies

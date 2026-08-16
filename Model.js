@@ -79,8 +79,16 @@ function heightAt(report, now) {
   return a + (b - a) * (pos - i)
 }
 
-function formatHeight(h) {
+function mToFt(h) {
+  return h * 3.28084
+}
+
+function formatHeight(h, units) {
   if (h === null || h === undefined || isNaN(h)) return ""
+  if (units === "imperial") {
+    var ft = mToFt(h)
+    return (ft >= 0 ? "+" : "") + ft.toFixed(1) + "ft"
+  }
   return (h >= 0 ? "+" : "") + h.toFixed(1) + "m"
 }
 
@@ -125,7 +133,7 @@ function smoothHeightAt(report, timeMs) {
 }
 
 // Today's tidal swing: highest high minus lowest low of today's events.
-function todayRange(events, now) {
+function todayRange(events, now, units) {
   var highs = [], lows = []
   for (var i = 0; i < events.length; i++) {
     if (events[i].time.toDateString() !== now.toDateString()) continue
@@ -133,7 +141,9 @@ function todayRange(events, now) {
     else lows.push(events[i].height)
   }
   if (highs.length === 0 || lows.length === 0) return ""
-  return (Math.max.apply(null, highs) - Math.min.apply(null, lows)).toFixed(1) + "m"
+  var meters = Math.max.apply(null, highs) - Math.min.apply(null, lows)
+  if (units === "imperial") return mToFt(meters).toFixed(1) + "ft"
+  return meters.toFixed(1) + "m"
 }
 
 function untilText(from, to) {
@@ -168,6 +178,16 @@ function parseGeocodingResults(raw) {
   } catch (e) {
     return []
   }
+}
+
+// tides-units.json holds {"units": "metric"|"imperial"} — empty string when
+// missing or unparseable, in which case the caller falls back to its default.
+function parseUnits(raw) {
+  try {
+    var data = JSON.parse(String(raw || ""))
+    if (data && (data.units === "metric" || data.units === "imperial")) return data.units
+  } catch (e) {}
+  return ""
 }
 
 // Serialized location file, matching weather.json's shape.
